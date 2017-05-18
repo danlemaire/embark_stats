@@ -253,13 +253,14 @@ data_frame(res = summary(lm1)$residuals, index = 1:length(summary(lm1)$residuals
 #Look at 4 diagnostic plots. Clearly  these are some very strange diagnostics 
 par(mfrow = c(2,2)) # Change the panel layout to 2 x 2 
 plot(lm1) 
-par(mfrow = c(1,1)) # Most prefer to change immediately back to 1 x 1 to avoid later surprises
 
 #What would diagnostic plots of a boolean variable look like? 
-lm(Weekly_Sales ~ IsHoliday, train) %>% plot
+lm(Weekly_Sales ~ IsHoliday, train) %>% 
+  plot
 
 #What would diagnostic plots of a continuous variable look like? 
-lm(Weekly_Sales ~ Size, train) %>% plot
+lm(Weekly_Sales ~ Size, train) %>% 
+  plot
 
 #What were those big outliers (Cook's Distance)? Black Friday!! 
 train %>% 
@@ -270,71 +271,89 @@ train %>%
 lm(Weekly_Sales ~ ., train) %>% 
   plot 
 
-#Residuals vs Fitted Plot: Are there non-linear patterns? Why does model underestimate more at higher values? #Normal Q-Q Plot: Deeply concerned about the trend on the right, shoudl follow line #Scale-Location Plot: Again clear differences between right and left #Residuals vs Leverage Plot: Strange clustering (holidays?), but no single point exerts too much leverage.  Could try investigating or removing labelled points
+par(mfrow = c(1,1)) # Most prefer to change immediately back to 1 x 1 to avoid later surprises
 
-#Is there anything special about the observations with highest leverage? train
-%>% select(Store, Date, IsHoliday, Weekly_Sales) %>% slice(c(224464, 37254,
-954266)) 
+#Residuals vs Fitted Plot: Are there non-linear patterns? Why does model underestimate more at higher values? 
+##Normal Q-Q Plot: Deeply concerned about the trend on the right, shoudl follow line 
+###Scale-Location Plot: Again clear differences between right and left 
+####Residuals vs Leverage Plot: Strange clustering (holidays?), but no single point exerts too much leverage.  Could try investigating or removing labelled points
+
+#Is there anything special about the observations with highest leverage? Black Friday!
+train %>% 
+  select(Store, Date, IsHoliday, Weekly_Sales) %>% 
+  slice(c(224464, 37254, 954266)) 
 ```
 
 #Controlling for other variables
 
 ## Is Store the only variable that affects weekly sales?
 
-I hypothesize that if the week contains a significant holiday, that may
-influence the weekly sales. The holidays recorded are Superbowl, Labor Day,
-Thanksgiving, and Christmas.  In the formula for the linear model, the dependent
-variable is on the left and the independent variable is on the right of the
-tilde.  To add a control, simply append it with a plus sign as another
-independent variable.  The first order of business is to factor all necessary
-variables and shuffle into random order as per diagnostic plots above.
+We might hypothesize that if the week contains a significant holiday, that may influence the weekly sales. The holidays recorded are Superbowl, Labor Day, Thanksgiving, and Christmas.  In the formula for the linear model, the dependent variable is on the left and the independent variable is on the right of the tilde.  To add a control, simply append it with a plus sign as another independent variable.  The first order of business is to factor all necessary variables and shuffle into random order as per diagnostic plots above.
 
 
 ```{r} 
-#Factor necessary variables and basic feature engineering train %<>% 
-mutate(Store = factor(Store), Dept = factor(Dept), Type = factor(Type), 
-IsHoliday = factor(IsHoliday), Holiday = factor(Holiday), Holiday =
-ifelse(is.na(Holiday), "None", Holiday), MarkDown1 = ifelse(is.na(MarkDown1), 0,
-MarkDown1), MarkDown2 = ifelse(is.na(MarkDown2), 0, MarkDown2), MarkDown3 =
-ifelse(is.na(MarkDown3), 0, MarkDown3), MarkDown4 = ifelse(is.na(MarkDown4), 0,
-MarkDown4), MarkDown5 = ifelse(is.na(MarkDown5), 0, MarkDown5), Size =
-as.numeric(Size), Month = factor(month(Date)), Year = year(Date), Quarter =
-factor(quarter(Date)) )
+#Factor necessary variables and basic feature engineering 
+train %<>% mutate(Store = factor(Store), 
+                  Dept = factor(Dept), 
+                  Type = factor(Type),  
+                  IsHoliday = factor(IsHoliday), 
+                  Holiday = factor(Holiday), 
+                  Holiday = ifelse(is.na(Holiday), "None", Holiday), 
+                  MarkDown1 = ifelse(is.na(MarkDown1), 0, MarkDown1), 
+                  MarkDown2 = ifelse(is.na(MarkDown2), 0, MarkDown2), 
+                  MarkDown3 = ifelse(is.na(MarkDown3), 0, MarkDown3), 
+                  MarkDown4 = ifelse(is.na(MarkDown4), 0, MarkDown4), 
+                  MarkDown5 = ifelse(is.na(MarkDown5), 0, MarkDown5), 
+                  Size = as.numeric(Size), 
+                  Month = factor(month(Date)), 
+                  Year = year(Date), 
+                  Quarter = factor(quarter(Date))
+                  )
 
-#Shuffle dataset into random order train <- train[sample(1:nrow(train)), ]
+#Shuffle dataset into random order 
+train <- train[sample(1:nrow(train)), ]
 
 ####
 
-#Sales on holiday weeks are an average of 1134 more and difference is
-statistically significant. Lets use IsHoliday as a control 
-summary(lm(Weekly_Sales ~ IsHoliday, data = train)) %>% tidy
+#Sales on holiday weeks are an average of 1134 more and difference is statistically significant. Lets use IsHoliday as a control 
+summary(lm(Weekly_Sales ~ IsHoliday, data = train)) %>% 
+  tidy
 
-#Notice that controlling for Holidays has very little effect on the conditional
-means of each store. In addition, the effect size of whether a week contains one
-fo these four holidays is very small.  However, try replacing IsHoliday with the
-variable Holiday and note the difference in the output. controlled <-
-summary(lm(Weekly_Sales ~ Store + IsHoliday, data = train)) %>% tidy %>% 
-mutate(IsStore = str_detect(term, "Store"), rank = rank(-abs(estimate)), control
-= 1) %>% filter(!IsStore | rank(-abs(estimate)) < 5) %>% select(rank, term,
-estimate, p.value)
+#Notice that controlling for Holidays has very little effect on the conditional means of each store. In addition, the effect size of whether a week contains one of these four holidays is very small.  However, try replacing IsHoliday with Holiday and note the difference in the output. 
+controlled <- summary(lm(Weekly_Sales ~ Store + IsHoliday, data = train)) %>% 
+  tidy %>%  
+  mutate(IsStore = str_detect(term, "Store"), rank = rank(-abs(estimate)), control = 1) %>% 
+  filter(!IsStore | rank(-abs(estimate)) < 5) %>% 
+  select(rank, term, estimate, p.value)
 
-uncontrolled <- summary(lm(Weekly_Sales ~ Store, data = train)) %>% tidy %>% 
-mutate(IsStore = str_detect(term, "Store"), rank = rank(-abs(estimate)), control
-= 0) %>% filter(!IsStore | rank(-abs(estimate)) < 5) %>% select(rank, term,
-estimate, p.value)
+uncontrolled <- summary(lm(Weekly_Sales ~ Store, data = train)) %>% 
+  tidy %>%
+  mutate(IsStore = str_detect(term, "Store"), 
+         rank = rank(-abs(estimate)), 
+         control = 0) %>% 
+  filter(!IsStore | rank(-abs(estimate)) < 5) %>% 
+  select(rank, term, estimate, p.value)
 
-controlled %>% bind_rows(uncontrolled)
+controlled %>% 
+  bind_rows(uncontrolled)
 
-# summary(lm(Weekly_Sales ~ Store, data = train)) %>% tidy %>% mutate(intercept
-= estimate[1], cond_mean = ifelse(estimate == intercept, estimate, intercept +
-estimate), rank = rank(cond_mean)) %>% filter(str_detect(term, "Store")) %>% 
-filter(rank == max(rank) | rank == min(rank)) %>% select(rank, cond_mean, term,
-estimate) %>% summarise(diff = sum(abs(estimate))) #$24,454.89
+summary(lm(Weekly_Sales ~ Store, data = train)) %>% 
+  tidy %>% 
+  mutate(intercept = estimate[1], 
+         cond_mean = ifelse(estimate == intercept, estimate, intercept + estimate), 
+         rank = rank(cond_mean)) %>% 
+  filter(str_detect(term, "Store")) %>%  
+  filter(rank == max(rank) | rank == min(rank)) %>% 
+  select(rank, cond_mean, term, estimate) %>% 
+  summarise(diff = sum(abs(estimate))) 
+#$24,454.89
 
 
-summary(lm(Weekly_Sales ~ ., data = train[,c(1:16,18:20)])) %>% tidy %>% 
-filter(str_detect(term, "Store5") | str_detect(term, "Store20")) %>% 
-summarise(diff = sum(abs(estimate))) #$27,171.95
+summary(lm(Weekly_Sales ~ ., data = train[,c(1:16,18:20)])) %>% 
+  tidy %>%  
+  filter(str_detect(term, "Store5") | str_detect(term, "Store20")) %>%
+  summarise(diff = sum(abs(estimate))) 
+#$27,171.95
 
 summary(lm(Weekly_Sales ~ Month, train)) 5229.6
 
@@ -352,5 +371,10 @@ lmtest <- train(Weekly_Sales ~ ., data = train, method = "lm", verbose = T)
 
 
 
-Control Variables Dummitize Factor Variables Confidence Intervals Regression
-Sensitivity Analysis Interaction Effects
+Control Variables 
+Dummitize 
+Factor Variables 
+Confidence Intervals 
+Regression
+Sensitivity Analysis 
+Interaction Effects
