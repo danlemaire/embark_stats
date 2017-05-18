@@ -26,23 +26,19 @@ library(magrittr)
 library(tidyverse)
 
 #Load data 
-train <- read_csv("data/train.csv") 
-test <- read_csv("data/test.csv")
+df <- read_csv("data/train.csv") 
 stores <- read_csv("data/stores.csv") 
 features <- read_csv("data/features.csv")
 
 #Make full data set with all tables combined 
-train %<>% mutate(is_train = 1) 
-test %<>% mutate(is_train = 0) 
-full <- train %>% 
-  bind_rows(test) %>% 
+df %<>% 
   left_join(stores, "Store") %>% 
   left_join(features, c("Store", "Date")) %>% 
   select(-IsHoliday.x) %>% 
   rename(IsHoliday = IsHoliday.y)
 
 #Add specific holidays to data set 
-full %<>% left_join(data_frame(Date = as.Date(c("2010-02-12", "2011-02-11", "2012-02-10", "2013-02-08", 
+df %<>% left_join(data_frame(Date = as.Date(c("2010-02-12", "2011-02-11", "2012-02-10", "2013-02-08", 
                                                 "2010-09-10", "2011-09-09", "2012-09-07", "2013-09-06", 
                                                 "2010-11-26", "2011-11-25", "2012-11-23", "2013-11-29",
                                                 "2010-12-31", "2011-12-30", "2012-12-28", "2013-12-27")),
@@ -55,20 +51,12 @@ full %<>% left_join(data_frame(Date = as.Date(c("2010-02-12", "2011-02-11", "201
                     by = "Date" )
 
 #Look at full dataset 
-glimpse(full) 
-summary(full)
+glimpse(df) 
+summary(df)
 
-#Split back into train and test sets with complete features 
-train <- full %>% 
-  filter(is_train == 1) %>% 
-  select(-is_train)
-
-test <- full %>% 
-  filter(is_train == 0) %>% 
-  select(-is_train)
 
 #Remove extra dataframes from memory 
-rm(features, full, stores) 
+rm(features, stores) 
 ```
 
 # Test for a true difference between means
@@ -83,7 +71,7 @@ store 4, while both outperform store 39, the data would appear to support this. 
 
 ```{r} 
 #Rank stores to see how weekly averages compare 
-train %>% 
+df %>% 
   select(Weekly_Sales, Store) %>% 
   group_by(Store) %>% 
   summarise(avg = mean(Weekly_Sales)) %>% 
@@ -96,12 +84,12 @@ train %>%
 
 ```{r} 
 #Does store 20 perform better than store 4 on average? 
-store_20_sales <- train %>% 
+store_20_sales <- df %>% 
   filter(Store == 20) %>% 
   select(Weekly_Sales) %>% 
   unlist 
 
-store_4_sales <- train %>% 
+store_4_sales <- df %>% 
   filter(Store == 4) %>% 
   select(Weekly_Sales) %>% 
   unlist 
@@ -136,7 +124,7 @@ mean_cl_normal(store_20_sales) %>%
 
 ```{r} 
 #Does store 20 perform better than store 39 on average? 
-store_39_sales <- train %>% 
+store_39_sales <- df %>% 
   filter(Store == 39) %>% 
   select(Weekly_Sales) %>% 
   unlist 
@@ -174,10 +162,10 @@ With summary(lm()), we can run a quick OLS linear regression.  By factoring Stor
 
 ```{r} 
 #Check output of simple linear model 
-summary(lm(Weekly_Sales ~ factor(Store), data = train))
+summary(lm(Weekly_Sales ~ factor(Store), data = df))
 
 #Tidy output, rank, and compare 
-lm_simplified_output <- summary(lm(Weekly_Sales ~ factor(Store), data = train)) %>% 
+lm_simplified_output <- summary(lm(Weekly_Sales ~ factor(Store), data = df)) %>% 
   tidy %>% 
   select(term, estimate, p.value) %>% 
   arrange(abs(estimate)) %>% 
@@ -185,31 +173,31 @@ lm_simplified_output <- summary(lm(Weekly_Sales ~ factor(Store), data = train)) 
   slice(c(1:4,45))
 
 #Create a conditional mean for each store in simplifed list 
-store1_mean <- train %>% 
+store1_mean <- df %>% 
   filter(Store == 1) %>% 
   select(Weekly_Sales) %>% 
   unlist %>% 
   mean 
 
-store6_mean <- train %>% 
+store6_mean <- df %>% 
   filter(Store == 6) %>% 
   select(Weekly_Sales) %>% 
   unlist %>% 
   mean  
 
-store39_mean <- train %>% 
+store39_mean <- df %>% 
   filter(Store == 39) %>% 
   select(Weekly_Sales) %>% 
   unlist %>% 
   mean 
 
-store19_mean <- train %>% 
+store19_mean <- df %>% 
   filter(Store == 19) %>% 
   select(Weekly_Sales) %>% 
   unlist %>% 
   mean 
 
-store23_mean <- train %>% 
+store23_mean <- df %>% 
   filter(Store == 23) %>% 
   select(Weekly_Sales) %>% 
   unlist %>% 
@@ -222,11 +210,11 @@ lm_simplified_output %>%
          ) 
 ```
 
-## How can I interpret the performance of my model?
+## How can I interpret the output of my model?
 
 ```{r} 
 #Available objects in output of model
-lm1 <- lm(Weekly_Sales ~ factor(Store), train)
+lm1 <- lm(Weekly_Sales ~ factor(Store), df)
 lm1 %>% 
   summary %>% 
   names
@@ -255,20 +243,20 @@ par(mfrow = c(2,2)) # Change the panel layout to 2 x 2
 plot(lm1) 
 
 #What would diagnostic plots of a boolean variable look like? 
-lm(Weekly_Sales ~ IsHoliday, train) %>% 
+lm(Weekly_Sales ~ IsHoliday, df) %>% 
   plot
 
 #What would diagnostic plots of a continuous variable look like? 
-lm(Weekly_Sales ~ Size, train) %>% 
+lm(Weekly_Sales ~ Size, df) %>% 
   plot
 
 #What were those big outliers (Cook's Distance)? Black Friday!! 
-train %>% 
+df %>% 
   select(Store, Date, IsHoliday, Weekly_Sales) %>% 
   slice(c(95374, 338014))
 
 #How about diagnostic plots with all variables? 
-lm(Weekly_Sales ~ ., train) %>% 
+lm(Weekly_Sales ~ ., df) %>% 
   plot 
 
 par(mfrow = c(1,1)) # Most prefer to change immediately back to 1 x 1 to avoid later surprises
@@ -279,7 +267,7 @@ par(mfrow = c(1,1)) # Most prefer to change immediately back to 1 x 1 to avoid l
 ####Residuals vs Leverage Plot: Strange clustering (holidays?), but no single point exerts too much leverage.  Could try investigating or removing labelled points
 
 #Is there anything special about the observations with highest leverage? Black Friday!
-train %>% 
+df %>% 
   select(Store, Date, IsHoliday, Weekly_Sales) %>% 
   slice(c(224464, 37254, 954266)) 
 ```
@@ -293,12 +281,12 @@ We might hypothesize that if the week contains a significant holiday, that may i
 
 ```{r} 
 #Factor necessary variables and basic feature engineering 
-train %<>% mutate(Store = factor(Store), 
+df %<>% mutate(Store = factor(Store), 
                   Dept = factor(Dept), 
                   Type = factor(Type),  
                   IsHoliday = factor(IsHoliday), 
-                  Holiday = factor(Holiday), 
                   Holiday = ifelse(is.na(Holiday), "None", Holiday), 
+                  Holiday = factor(Holiday), 
                   MarkDown1 = ifelse(is.na(MarkDown1), 0, MarkDown1), 
                   MarkDown2 = ifelse(is.na(MarkDown2), 0, MarkDown2), 
                   MarkDown3 = ifelse(is.na(MarkDown3), 0, MarkDown3), 
@@ -311,22 +299,22 @@ train %<>% mutate(Store = factor(Store),
                   )
 
 #Shuffle dataset into random order 
-train <- train[sample(1:nrow(train)), ]
+df <- df[sample(1:nrow(df)), ]
 
 ####
 
 #Sales on holiday weeks are an average of 1134 more and difference is statistically significant. Lets use IsHoliday as a control 
-summary(lm(Weekly_Sales ~ IsHoliday, data = train)) %>% 
+summary(lm(Weekly_Sales ~ IsHoliday, data = df)) %>% 
   tidy
 
 #Notice that controlling for Holidays has very little effect on the conditional means of each store. In addition, the effect size of whether a week contains one of these four holidays is very small.  However, try replacing IsHoliday with Holiday and note the difference in the output. 
-controlled <- summary(lm(Weekly_Sales ~ Store + IsHoliday, data = train)) %>% 
+controlled <- summary(lm(Weekly_Sales ~ Store + IsHoliday, data = df)) %>% 
   tidy %>%  
   mutate(IsStore = str_detect(term, "Store"), rank = rank(-abs(estimate)), control = 1) %>% 
   filter(!IsStore | rank(-abs(estimate)) < 5) %>% 
   select(rank, term, estimate, p.value)
 
-uncontrolled <- summary(lm(Weekly_Sales ~ Store, data = train)) %>% 
+uncontrolled <- summary(lm(Weekly_Sales ~ Store, data = df)) %>% 
   tidy %>%
   mutate(IsStore = str_detect(term, "Store"), 
          rank = rank(-abs(estimate)), 
@@ -337,7 +325,8 @@ uncontrolled <- summary(lm(Weekly_Sales ~ Store, data = train)) %>%
 controlled %>% 
   bind_rows(uncontrolled)
 
-summary(lm(Weekly_Sales ~ Store, data = train)) %>% 
+#What is the difference in average weekly sales between the best performing and worst performing stores?
+summary(lm(Weekly_Sales ~ Store, data = df)) %>% 
   tidy %>% 
   mutate(intercept = estimate[1], 
          cond_mean = ifelse(estimate == intercept, estimate, intercept + estimate), 
@@ -345,36 +334,101 @@ summary(lm(Weekly_Sales ~ Store, data = train)) %>%
   filter(str_detect(term, "Store")) %>%  
   filter(rank == max(rank) | rank == min(rank)) %>% 
   select(rank, cond_mean, term, estimate) %>% 
-  summarise(diff = sum(abs(estimate))) 
+  summarise(Performance_difference_between_best_and_worst = sum(abs(estimate))) 
 #$24,454.89
 
-
-summary(lm(Weekly_Sales ~ ., data = train[,c(1:16,18:20)])) %>% 
+#What is the difference in average weekly sales between the best performing and worst performing stores when controlling for all avialable features in the model?  What does this mean?
+summary(lm(Weekly_Sales ~ ., data = df[,c(1:16,18:20)])) %>% 
   tidy %>%  
   filter(str_detect(term, "Store5") | str_detect(term, "Store20")) %>%
-  summarise(diff = sum(abs(estimate))) 
+  summarise(Performance_diff_when_controlling_for_all_vars = sum(abs(estimate))) 
 #$27,171.95
+```
 
-summary(lm(Weekly_Sales ~ Month, train)) 5229.6
+# How can I measure the performance of my model?
 
-summary(lm(Weekly_Sales ~ Month + Year, train))
+All models try to approximate a real world system. Some portion of real-world systems are systematic and therefore, can be modelled.  However, the other portion of the real-world system is random and cannot be modelled.  "All models are wrong, but some are useful".  The best performing models have captured nearly all of the systematic variance of the real-world system without modelling the random portion of the system.  For an in-depth understanding, read about the "Bias-Variance Tradeoff".  In reality, the closer we get to modelling all of the systematic variance, the greater the risk we have of modellign the random variance, a problem known as overfitting.  When we do this, the model does not work as well on new data or we may make incorrect inferences. Lets split the data into a train and test set, optimize the model for the train set and see how it compares on the test set.
 
-lmtest <- train(Weekly_Sales ~ ., data = train, method = "lm", verbose = T)
+```{r, message=FALSE, warning=FALSE}
+set.seed(1234)
 
+#Add index column
+df %<>% 
+  mutate(index = 1:nrow(.))
 
+#Build test set out of 30% of total data
+test <- sample_frac(df, 0.3)
 
+#Rebuild train set out of rows not in test set
+train <- df %>% 
+  filter(!index %in% test$index)
 
+#Build linear model on train set
+split_lm <- lm(Weekly_Sales ~ Store + Dept + Date + Type + Size + Temperature + Fuel_Price + CPI + Unemployment + Month + Year, train)
 
+#Average error of prediction, for reference, the Kaggle winner was RMSE = 2301. This score ($13,193) would rank somewhere around 570 out of 690 submissions.
+split_lm_test_error <- RMSE(predict(split_lm, test), test$Weekly_Sales)
+
+#What if we split data again?
+test <- sample_frac(df, 0.3)
+train <- filter(df, !index %in% test$index)
+split_lm2 <- lm(Weekly_Sales ~ Store + Dept + Date + Type + Size + Temperature + Fuel_Price + CPI + Unemployment + Month + Year, train)
+split_lm2_test_error <- RMSE(predict(split_lm2, test), test$Weekly_Sales)
+
+#Notice that the error changes a little every time we run it
+split_lm_test_error
+split_lm2_test_error
+
+#How do we get a sense of how the model will perform on some unknown test set?
+#One slow and complicated way is to write a loop to do this a bunch of times, then aggregate the results.
+
+fold_and_model <- function(dataframe, iterations) {
+  #Model will create a fold of 70/30, run model on 70 and calculate RMSE on 30
+  
+  #Initialize container for results
+  results <- data_frame(rmse = numeric())
+  
+  for (i in 1:iterations) {
+    test <- sample_frac(df, 0.3)
+    train <- filter(df, !index %in% test$index)
+    lm <- lm(Weekly_Sales ~ Store + Dept + Date + Type + Size + 
+                      Temperature + Fuel_Price + CPI + Unemployment + Month + Year, 
+                    train)
+    error <- RMSE(predict(lm, test), test$Weekly_Sales)
+    results[i,] <-  error
+  }
+  
+  print(paste0("The average is ", mean(results$rmse)))
+  print(paste0("The std dev is ", sd(results$rmse)))
+  ggplot(results, aes(rmse)) + geom_density()
+}
+
+fold_and_model(df, 10)
+
+#Thus, we are "pretty sure" this model will produce an average error of 13,200 (give or take 100). How can we quantify what we mean by pretty sure?
+```
+
+## Confidence Intervals 
+
+```{r}
+
+size_lm <- lm(Weekly_Sales ~ Size, train)
+
+size_lm %>% 
+  predict(test, interval = "confidence") %>% 
+  as_tibble %>% 
+  summarise(lower = mean(lwr),
+            prediction = mean(fit),
+            upper = mean(upr)) %>% 
+  round
 
 ```
 
 
 
 
-Control Variables 
-Dummitize 
-Factor Variables 
-Confidence Intervals 
+
+
 Regression
 Sensitivity Analysis 
 Interaction Effects
