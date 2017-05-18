@@ -1,0 +1,12 @@
+---
+title: "Week 3"
+output: html_notebook
+---
+
+Week 3
+Logistic Regression
+Accuracy, ROC, etc
+Random Forest
+glmnet
+Model Selection
+Ensembling

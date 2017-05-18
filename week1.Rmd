@@ -1,0 +1,356 @@
+--- 
+title: "Week 1" 
+output: html_notebook 
+--- 
+
+# Basic Business Statistics in R
+
+In my interactions with business professionals who use R, I have frequently heard the importance of reviewing the statistical fundamentals that drive decision-making in the workplace.  The purpose of this notebook is to review the most fundamental elements of statistically sound decision-making using a typical business dataset.  In this notebook, regressions and tests for significance are reviewed.
+
+## Load Packages and Necessary Data
+
+```{r, message=FALSE, warning=FALSE, include=FALSE} 
+#Load necessary libraries 
+#install.packages("tidyverse") 
+##install.packages("magrittr") 
+#install.packages("Hmisc") 
+##install.packages("scales") 
+#install.packages("caret") 
+library(caret) 
+library(lubridate) 
+library(stringr) 
+library(broom) 
+library(scales) 
+library(Hmisc) 
+library(magrittr) 
+library(tidyverse)
+
+#Load data 
+train <- read_csv("data/train.csv") 
+test <- read_csv("data/test.csv")
+stores <- read_csv("data/stores.csv") 
+features <- read_csv("data/features.csv")
+
+#Make full data set with all tables combined 
+train %<>% mutate(is_train = 1) 
+test %<>% mutate(is_train = 0) 
+full <- train %>% 
+  bind_rows(test) %>% 
+  left_join(stores, "Store") %>% 
+  left_join(features, c("Store", "Date")) %>% 
+  select(-IsHoliday.x) %>% 
+  rename(IsHoliday = IsHoliday.y)
+
+#Add specific holidays to data set 
+full %<>% left_join(data_frame(Date = as.Date(c("2010-02-12", "2011-02-11", "2012-02-10", "2013-02-08", 
+                                                "2010-09-10", "2011-09-09", "2012-09-07", "2013-09-06", 
+                                                "2010-11-26", "2011-11-25", "2012-11-23", "2013-11-29",
+                                                "2010-12-31", "2011-12-30", "2012-12-28", "2013-12-27")),
+                               Holiday = c(rep("Superbowl", 4), 
+                                           rep("LaborDay", 4), 
+                                           rep("Thanksgiving", 4), 
+                                           rep("Christmas", 4)
+                                           )
+                               ), 
+                    by = "Date" )
+
+#Look at full dataset 
+glimpse(full) 
+summary(full)
+
+#Split back into train and test sets with complete features 
+train <- full %>% 
+  filter(is_train == 1) %>% 
+  select(-is_train)
+
+test <- full %>% 
+  filter(is_train == 0) %>% 
+  select(-is_train)
+
+#Remove extra dataframes from memory 
+rm(features, full, stores) 
+```
+
+# Test for a true difference between means
+
+For the first challenge, we will compare stores 20, 4, and 39.  Stores 20 and 4 are ranked #1 and #2 in average weekly sales (out of 45 total stores) while store 39 is ranked #10. Does store 20 perform better than store 4?  Does store 20 perform better than store 39?
+
+To conceptualize the problem, I consider disc golf.  I have certainly played a few rounds where I have performed at par, but does this mean I am par player?  I tend to remember my best rounds and chalk it up to skill while discarding my worst rounds as "bad luck".  The reality is that some of the outcome is skill and some is luck. If I were to play against someone exactly as skilled as myself and win by one stroke, it would not be accurate to say that I am a better player since it was really chance that determined it.  However, how many strokes would I have to win by before you start disbelieving that my competitor really is as good as me: 3? 10? 20?
+
+In the same way, how do we compare the sales performance of several stores? If one store sells 10M dollars in product in one week, but another sells 10,000,001 dollars, would you believe that the second store is better than the first? If we just look at the average weekly sales and say that store 20 outperforms
+store 4, while both outperform store 39, the data would appear to support this.  However, this does not take into account the natural variation in each week's sales.  The challenge then is to use the Welch's Studentized T-test to see if there is a true difference between means.
+
+
+```{r} 
+#Rank stores to see how weekly averages compare 
+train %>% 
+  select(Weekly_Sales, Store) %>% 
+  group_by(Store) %>% 
+  summarise(avg = mean(Weekly_Sales)) %>% 
+  arrange(-avg) %>% 
+  mutate(rank = rank(-avg)) 
+```
+
+
+## Is there a true difference between the average weekly sales of Store 20 and Store 4?  Compare the distributions and visualize the difference.
+
+```{r} 
+#Does store 20 perform better than store 4 on average? 
+store_20_sales <- train %>% 
+  filter(Store == 20) %>% 
+  select(Weekly_Sales) %>% 
+  unlist 
+
+store_4_sales <- train %>% 
+  filter(Store == 4) %>% 
+  select(Weekly_Sales) %>% 
+  unlist 
+
+twenty_vs_four <- stats::t.test(store_20_sales, store_4_sales, conf.level = .95)
+
+#Distributions of store 20 and store 4 
+data_frame(sales = store_20_sales, store = "Store 20") %>% 
+  bind_rows(data_frame(sales = store_4_sales, store = "Store4")) %>% 
+  ggplot(aes(sales, fill = store)) + 
+    geom_density(alpha = .3) + 
+    scale_x_log10(limits = c(1, 1000000)) + 
+    geom_vline(xintercept = mean(store_20_sales), color = "red") + 
+    geom_vline(xintercept = mean(store_4_sales), color = "blue")
+
+#Visualize difference in means w/errorbars for store 20 and store 4 
+mean_cl_normal(store_20_sales) %>% 
+  bind_rows(mean_cl_normal(store_4_sales)) %>% 
+  mutate(store = c("store_20", "store_4")) %>% 
+  ggplot(aes(x = store, y = y)) + 
+    geom_bar(stat = "identity", fill = "lightgray") + 
+    geom_errorbar(aes(ymin = ymin, ymax = ymax), width = .2, color = "red") + 
+    labs(title = "No true difference in means between Store 20 and Store 4",
+         x = element_blank(), 
+         y = "Average Weekly Sales") + 
+    scale_x_discrete(labels = c("Store 20", "Store 4")) + 
+    scale_y_continuous(labels = scales::dollar) + 
+    theme_bw() 
+```
+
+## Is there a true difference between the average weekly sales of Store 20 and Store 39?  Compare the distributions and visualize the difference.
+
+```{r} 
+#Does store 20 perform better than store 39 on average? 
+store_39_sales <- train %>% 
+  filter(Store == 39) %>% 
+  select(Weekly_Sales) %>% 
+  unlist 
+
+twenty_vs_thirtynine <- stats::t.test(store_20_sales, store_39_sales, conf.level = .95)
+
+#Distribution of store 20 and store 39 
+data_frame(sales = store_20_sales, store = "Store 20") %>% 
+  bind_rows(data_frame(sales = store_39_sales, store = "Store 39")) %>% 
+  ggplot(aes(sales, fill = store)) + 
+    geom_density(alpha = .3) + 
+    scale_x_log10(limits = c(1, 1000000)) + 
+    geom_vline(xintercept = mean(store_20_sales), color = "red") + 
+    geom_vline(xintercept = mean(store_39_sales), color = "blue")
+
+#Visualizing difference in means and errorbars for store 20 and store 39 
+mean_cl_normal(store_20_sales) %>% 
+  bind_rows(mean_cl_normal(store_39_sales)) %>% 
+  mutate(store = c("store_20", "store_39")) %>% 
+  ggplot(aes(x = store, y = y)) + 
+    geom_bar(stat = "identity", fill = "lightgray") + 
+    geom_errorbar(aes(ymin = ymin, ymax = ymax), width = .2, color = "red") + 
+    labs(title = "No true difference in means between Store 20 and Store 39", 
+         x = element_blank(), 
+         y = "Average Weekly Sales") + 
+    scale_x_discrete(labels = c("Store 20", "Store 39")) +  
+    scale_y_continuous(labels = scales::dollar) + theme_bw() 
+```
+
+# Interpreting OLS Linear Regressions
+
+## How can I compare the conditional means of all stores at once?
+
+With summary(lm()), we can run a quick OLS linear regression.  By factoring Store, the model creates a dummy variable for every level of the factor except the first, which is used as the reference case.  Each estimate (or Beta) is the conditional mean of that level when added to the intercept of the model. A p-value is produced for each level, which describes whether the estimate is statistically significant.
+
+```{r} 
+#Check output of simple linear model 
+summary(lm(Weekly_Sales ~ factor(Store), data = train))
+
+#Tidy output, rank, and compare 
+lm_simplified_output <- summary(lm(Weekly_Sales ~ factor(Store), data = train)) %>% 
+  tidy %>% 
+  select(term, estimate, p.value) %>% 
+  arrange(abs(estimate)) %>% 
+  mutate(p.value = round(p.value, 3), estimate = round(estimate, 1)) %>% 
+  slice(c(1:4,45))
+
+#Create a conditional mean for each store in simplifed list 
+store1_mean <- train %>% 
+  filter(Store == 1) %>% 
+  select(Weekly_Sales) %>% 
+  unlist %>% 
+  mean 
+
+store6_mean <- train %>% 
+  filter(Store == 6) %>% 
+  select(Weekly_Sales) %>% 
+  unlist %>% 
+  mean  
+
+store39_mean <- train %>% 
+  filter(Store == 39) %>% 
+  select(Weekly_Sales) %>% 
+  unlist %>% 
+  mean 
+
+store19_mean <- train %>% 
+  filter(Store == 19) %>% 
+  select(Weekly_Sales) %>% 
+  unlist %>% 
+  mean 
+
+store23_mean <- train %>% 
+  filter(Store == 23) %>% 
+  select(Weekly_Sales) %>% 
+  unlist %>% 
+  mean
+
+#Compare mean calculated from data with mean calculated from model output 
+lm_simplified_output %>% 
+  mutate(means_from_data = c(store6_mean, store39_mean, store19_mean, store23_mean, store1_mean),
+         means_from_model = ifelse(term == "(Intercept)", estimate, estimate[5] + estimate)
+         ) 
+```
+
+## How can I interpret the performance of my model?
+
+```{r} 
+#Available objects in output of model
+lm1 <- lm(Weekly_Sales ~ factor(Store), train)
+lm1 %>% 
+  summary %>% 
+  names
+
+#How much of the variation is captured in the model? 
+summary(lm1)$r.squared 
+summary(lm1)$adj.r.squared
+
+#Plot residuals (errors) 
+data_frame(res = summary(lm1)$residuals, index = 1:length(summary(lm1)$residuals)) %>% 
+  ggplot(aes(index, res)) + 
+    geom_point(alpha = .01, size = .1) + 
+    geom_hline(yintercept = 0, color = "red", size = 1, alpha = .4) + 
+    geom_smooth(color = "blue", size = .7) + 
+    coord_cartesian(ylim = c(-25000, 25000)) + 
+    labs(title = "Do the residuals (observed - fitted) look non-systematic? ", 
+         y = "Residuals", 
+         x = element_blank()) + 
+    theme_bw() +  
+    theme(axis.text.x = element_blank(), 
+          axis.ticks.x = element_blank()) +  
+    scale_y_continuous(label = dollar)
+
+#Look at 4 diagnostic plots. Clearly  these are some very strange diagnostics 
+par(mfrow = c(2,2)) # Change the panel layout to 2 x 2 
+plot(lm1) 
+par(mfrow = c(1,1)) # Most prefer to change immediately back to 1 x 1 to avoid later surprises
+
+#What would diagnostic plots of a boolean variable look like? 
+lm(Weekly_Sales ~ IsHoliday, train) %>% plot
+
+#What would diagnostic plots of a continuous variable look like? 
+lm(Weekly_Sales ~ Size, train) %>% plot
+
+#What were those big outliers (Cook's Distance)? Black Friday!! 
+train %>% 
+  select(Store, Date, IsHoliday, Weekly_Sales) %>% 
+  slice(c(95374, 338014))
+
+#How about diagnostic plots with all variables? 
+lm(Weekly_Sales ~ ., train) %>% 
+  plot 
+
+#Residuals vs Fitted Plot: Are there non-linear patterns? Why does model underestimate more at higher values? #Normal Q-Q Plot: Deeply concerned about the trend on the right, shoudl follow line #Scale-Location Plot: Again clear differences between right and left #Residuals vs Leverage Plot: Strange clustering (holidays?), but no single point exerts too much leverage.  Could try investigating or removing labelled points
+
+#Is there anything special about the observations with highest leverage? train
+%>% select(Store, Date, IsHoliday, Weekly_Sales) %>% slice(c(224464, 37254,
+954266)) 
+```
+
+#Controlling for other variables
+
+## Is Store the only variable that affects weekly sales?
+
+I hypothesize that if the week contains a significant holiday, that may
+influence the weekly sales. The holidays recorded are Superbowl, Labor Day,
+Thanksgiving, and Christmas.  In the formula for the linear model, the dependent
+variable is on the left and the independent variable is on the right of the
+tilde.  To add a control, simply append it with a plus sign as another
+independent variable.  The first order of business is to factor all necessary
+variables and shuffle into random order as per diagnostic plots above.
+
+
+```{r} 
+#Factor necessary variables and basic feature engineering train %<>% 
+mutate(Store = factor(Store), Dept = factor(Dept), Type = factor(Type), 
+IsHoliday = factor(IsHoliday), Holiday = factor(Holiday), Holiday =
+ifelse(is.na(Holiday), "None", Holiday), MarkDown1 = ifelse(is.na(MarkDown1), 0,
+MarkDown1), MarkDown2 = ifelse(is.na(MarkDown2), 0, MarkDown2), MarkDown3 =
+ifelse(is.na(MarkDown3), 0, MarkDown3), MarkDown4 = ifelse(is.na(MarkDown4), 0,
+MarkDown4), MarkDown5 = ifelse(is.na(MarkDown5), 0, MarkDown5), Size =
+as.numeric(Size), Month = factor(month(Date)), Year = year(Date), Quarter =
+factor(quarter(Date)) )
+
+#Shuffle dataset into random order train <- train[sample(1:nrow(train)), ]
+
+####
+
+#Sales on holiday weeks are an average of 1134 more and difference is
+statistically significant. Lets use IsHoliday as a control 
+summary(lm(Weekly_Sales ~ IsHoliday, data = train)) %>% tidy
+
+#Notice that controlling for Holidays has very little effect on the conditional
+means of each store. In addition, the effect size of whether a week contains one
+fo these four holidays is very small.  However, try replacing IsHoliday with the
+variable Holiday and note the difference in the output. controlled <-
+summary(lm(Weekly_Sales ~ Store + IsHoliday, data = train)) %>% tidy %>% 
+mutate(IsStore = str_detect(term, "Store"), rank = rank(-abs(estimate)), control
+= 1) %>% filter(!IsStore | rank(-abs(estimate)) < 5) %>% select(rank, term,
+estimate, p.value)
+
+uncontrolled <- summary(lm(Weekly_Sales ~ Store, data = train)) %>% tidy %>% 
+mutate(IsStore = str_detect(term, "Store"), rank = rank(-abs(estimate)), control
+= 0) %>% filter(!IsStore | rank(-abs(estimate)) < 5) %>% select(rank, term,
+estimate, p.value)
+
+controlled %>% bind_rows(uncontrolled)
+
+# summary(lm(Weekly_Sales ~ Store, data = train)) %>% tidy %>% mutate(intercept
+= estimate[1], cond_mean = ifelse(estimate == intercept, estimate, intercept +
+estimate), rank = rank(cond_mean)) %>% filter(str_detect(term, "Store")) %>% 
+filter(rank == max(rank) | rank == min(rank)) %>% select(rank, cond_mean, term,
+estimate) %>% summarise(diff = sum(abs(estimate))) #$24,454.89
+
+
+summary(lm(Weekly_Sales ~ ., data = train[,c(1:16,18:20)])) %>% tidy %>% 
+filter(str_detect(term, "Store5") | str_detect(term, "Store20")) %>% 
+summarise(diff = sum(abs(estimate))) #$27,171.95
+
+summary(lm(Weekly_Sales ~ Month, train)) 5229.6
+
+summary(lm(Weekly_Sales ~ Month + Year, train))
+
+lmtest <- train(Weekly_Sales ~ ., data = train, method = "lm", verbose = T)
+
+
+
+
+
+
+```
+
+
+
+
+Control Variables Dummitize Factor Variables Confidence Intervals Regression
+Sensitivity Analysis Interaction Effects

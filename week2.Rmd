@@ -1,0 +1,17 @@
+---
+title: "Week 2"
+output: html_notebook
+---
+
+
+Week 2
+Caret
+Logistic Regression
+Overfitting
+Train/test split
+Cross-fold Validation
+Model Pre-processing (nzv, center, scale, pcs, log)
+Imputation
+
+
+
