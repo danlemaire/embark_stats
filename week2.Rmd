@@ -10,7 +10,7 @@ Logistic Regression
 Overfitting
 Train/test split
 Cross-fold Validation
-Model Pre-processing (nzv, center, scale, pcs, log)
+Model Pre-processing (nzv, center, scale, pca, log)
 Imputation
 
 

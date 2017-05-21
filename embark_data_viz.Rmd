@@ -1,0 +1,133 @@
+---
+title: "Data Viz with Front - Day 1"
+output: html_notebook
+---
+
+
+```{r}
+library(tidyverse)
+library(magrittr)
+library(stringr)
+library(scales)
+library(ggvis)
+
+#Load accidents data
+df <- read_csv("data/fars/accident.csv")
+
+#convert names to lower case
+names(df) %<>% 
+  str_to_lower
+```
+
+```{r}
+df %>% 
+  group_by(month, drunk_dr) %>% 
+  count %>% 
+  ungroup %>% 
+  mutate(month = factor(month),
+         drunk = drunk_dr != 0) %>% 
+  group_by(month, drunk) %>% 
+  summarise(accidents = sum(n)) %>% 
+  ggplot(aes(month, accidents, fill = drunk)) + 
+    geom_bar(stat = "identity", position = "dodge") +
+    scale_x_discrete(label = month.abb) +
+    scale_y_continuous(label = comma) +
+    labs(title = "Accidents by Month in 2015",
+         x = element_blank(),
+         y = element_blank(),
+         fill = "Drunk?") +
+  theme_bw()
+```
+
+```{r}
+df %>% 
+  group_by(month, drunk_dr) %>% 
+  count %>% 
+  ungroup %>% 
+  mutate(month = factor(month),
+         drunk = drunk_dr != 0) %>% 
+  group_by(month, drunk) %>% 
+  summarise(accidents = sum(n)) %>% 
+  ggplot(aes(month, accidents, fill = drunk)) + 
+    geom_bar(stat = "identity", position = "fill") +
+    scale_x_discrete(label = month.abb) +
+    scale_y_continuous(label = comma) +
+    labs(title = "Accidents by Month in 2015 as a Proportion",
+         x = element_blank(),
+         y = element_blank(),
+         fill = "Drunk?") +
+  theme_bw()
+```
+
+
+
+```{r}
+df %>% 
+  group_by(hour, drunk_dr) %>% 
+  filter(hour < 25) %>% 
+  count %>% 
+  ungroup %>% 
+  mutate(hour = factor(hour),
+         drunk = drunk_dr != 0) %>% 
+  group_by(hour, drunk) %>% 
+  summarise(accidents = sum(n)) %>% 
+  ungroup %>% 
+  ggplot(aes(hour, accidents, fill = drunk)) + 
+    geom_bar(stat = "identity", position = "fill") +
+    scale_x_discrete() +
+    scale_y_continuous(label = comma) +
+    labs(title = "Accidents by Month in 2015 as a Proportion",
+         x = element_blank(),
+         y = element_blank(),
+         fill = "Drunk?") +
+  theme_bw()
+```
+
+
+
+
+
+```{r}
+df %>% 
+  group_by(month, drunk_dr) %>% 
+  count %>% 
+  ungroup %>% 
+  mutate(month = factor(month),
+         drunk = drunk_dr != 0,
+         drunk = factor(as.numeric(drunk))) %>% 
+  group_by(month, drunk) %>% 
+  summarise(accidents = sum(n)) %>% 
+  ggvis(data = ., x = ~month, y = ~accidents, fill = ~drunk) %>% 
+  layer_bars(stack = FALSE) %>% 
+  
+  
+  
+  
+
+```
+
+
+
+
+```{r}
+
+df %>% 
+  group_by(drunk_dr, fatals) %>% 
+  count %>% 
+  ggplot(aes(fatals, n, fill = factor(drunk_dr))) +
+    geom_bar(stat = "identity", position = "dodge")
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+

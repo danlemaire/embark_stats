@@ -1,6 +1,8 @@
 --- 
-title: "Week 1" 
-output: html_notebook 
+title: "Week 1"
+output:
+  html_document: default
+  html_notebook: default
 --- 
 
 # Basic Business Statistics in R
@@ -10,12 +12,7 @@ In my interactions with business professionals who use R, I have frequently hear
 ## Load Packages and Necessary Data
 
 ```{r, message=FALSE, warning=FALSE, include=FALSE} 
-#Load necessary libraries 
-#install.packages("tidyverse") 
-##install.packages("magrittr") 
-#install.packages("Hmisc") 
-##install.packages("scales") 
-#install.packages("caret") 
+library(ggvis)
 library(caret) 
 library(lubridate) 
 library(stringr) 
@@ -69,7 +66,7 @@ In the same way, how do we compare the sales performance of several stores? If o
 store 4, while both outperform store 39, the data would appear to support this.  However, this does not take into account the natural variation in each week's sales.  The challenge then is to use the Welch's Studentized T-test to see if there is a true difference between means.
 
 
-```{r} 
+```{r, message=FALSE, warning=FALSE}
 #Rank stores to see how weekly averages compare 
 df %>% 
   select(Weekly_Sales, Store) %>% 
@@ -82,7 +79,7 @@ df %>%
 
 ## Is there a true difference between the average weekly sales of Store 20 and Store 4?  Compare the distributions and visualize the difference.
 
-```{r} 
+```{r, message=FALSE, warning=FALSE}
 #Does store 20 perform better than store 4 on average? 
 store_20_sales <- df %>% 
   filter(Store == 20) %>% 
@@ -122,7 +119,7 @@ mean_cl_normal(store_20_sales) %>%
 
 ## Is there a true difference between the average weekly sales of Store 20 and Store 39?  Compare the distributions and visualize the difference.
 
-```{r} 
+```{r, message=FALSE, warning=FALSE}
 #Does store 20 perform better than store 39 on average? 
 store_39_sales <- df %>% 
   filter(Store == 39) %>% 
@@ -160,7 +157,7 @@ mean_cl_normal(store_20_sales) %>%
 
 With summary(lm()), we can run a quick OLS linear regression.  By factoring Store, the model creates a dummy variable for every level of the factor except the first, which is used as the reference case.  Each estimate (or Beta) is the conditional mean of that level when added to the intercept of the model. A p-value is produced for each level, which describes whether the estimate is statistically significant.
 
-```{r} 
+```{r, message=FALSE, warning=FALSE}
 #Check output of simple linear model 
 summary(lm(Weekly_Sales ~ factor(Store), data = df))
 
@@ -212,7 +209,7 @@ lm_simplified_output %>%
 
 ## How can I interpret the output of my model?
 
-```{r} 
+```{r, message=FALSE, warning=FALSE}
 #Available objects in output of model
 lm1 <- lm(Weekly_Sales ~ factor(Store), df)
 lm1 %>% 
@@ -279,7 +276,7 @@ df %>%
 We might hypothesize that if the week contains a significant holiday, that may influence the weekly sales. The holidays recorded are Superbowl, Labor Day, Thanksgiving, and Christmas.  In the formula for the linear model, the dependent variable is on the left and the independent variable is on the right of the tilde.  To add a control, simply append it with a plus sign as another independent variable.  The first order of business is to factor all necessary variables and shuffle into random order as per diagnostic plots above.
 
 
-```{r} 
+```{r, message=FALSE, warning=FALSE}
 #Factor necessary variables and basic feature engineering 
 df %<>% mutate(Store = factor(Store), 
                   Dept = factor(Dept), 
@@ -408,20 +405,106 @@ fold_and_model(df, 10)
 #Thus, we are "pretty sure" this model will produce an average error of 13,200 (give or take 100). How can we quantify what we mean by pretty sure?
 ```
 
-## Confidence Intervals 
+# Confidence Intervals 
 
-```{r}
+Statistics is sometimes referred to as the "science of uncertainty".  It is an attempt at recognizing, quantifying, and communicating insights along with their associated uncertainty.  To get an intuition for how uncertainty in models can look, we build a dataframe out of 
 
+```{r, message=FALSE, warning=FALSE}
+#Change proportion of sample size to see what happens to confidence interval
+sample_fraction = .001
+
+#Change level of confidence interval
+confidence_level = .95
+
+#Predict Sales from Size of Store
 size_lm <- lm(Weekly_Sales ~ Size, train)
 
-size_lm %>% 
-  predict(test, interval = "confidence") %>% 
+#Build dataframe of predictions and confidence levels
+predictions <- predict(size_lm, 
+                       test, 
+                       #interval = "confidence",
+                       level = .1,
+                       se.fit = T) %>% 
   as_tibble %>% 
-  summarise(lower = mean(lwr),
-            prediction = mean(fit),
-            upper = mean(upr)) %>% 
-  round
+  select(fit, se.fit) %>% 
+  mutate(upper = fit + qnorm(1 - ((1 - confidence_level) / 2), 0, 1) * se.fit,
+         lower = fit - qnorm(1 - ((1 - confidence_level) / 2), 0, 1) * se.fit,
+         spread = upper - lower) %>% 
+  bind_cols(select(test, Size)) %>% 
+  arrange(Size) %>% 
+  unique %>% 
+  arrange(Size) %>% 
+  select(Size, lower, fit, upper, spread, se.fit)
 
+predictions
+```
+
+
+```{r, message=FALSE, warning=FALSE}
+#Experiment with size of sample and confidence level
+sample_fraction = .001
+confidence_level = .95
+
+#Look at confidence interval of prediction
+sample_frac(train, sample_fraction) %>% 
+  ggplot(aes(Size, Weekly_Sales)) +
+    #Plot train dataset
+    geom_point(color = "blue", alpha = .3) +
+    #Plot confidence interval around line of fit of train data
+    geom_smooth(method = "lm", color = "blue", fill = "blue", alpha = .3) +
+    #Plot fitted points from test data
+    geom_point(data = predictions, aes(Size, fit), color = "red") +
+    #Plot error bars on test data set
+    stat_summary(geom = "errorbar", 
+                 fun.data = mean_cl_normal, 
+                 #width = 0.1, 
+                 conf.int = confidence_level, 
+                 color = "red", 
+                 alpha = .3) +
+    labs(title = "More observations will shrink the size of the errorbars...",
+         subtitle = "...while demanding higher certainty grows the errorbars",
+         x = "Size of store (units unknown)",
+         y = "Weely Sales")
+```
+
+# Interaction Effects
+
+We have reviewed how to model the relationship between one dependent and one indepedent variable.  We have alos modelled the relationship when adding several other independent variables as controls. However, we might still be interested in how the relationship between the dependent and the independent variable might change relative to another variable.
+
+For example, one might hypothesize that poor weather will increase the accident rate in a certain area.  One might go further, though, and say that the effect of weather on accident rates is stronger in the dark than in the daylight.  How would one test for these interaction effects between variables?
+
+In the example below, we will test two hypotheses:
+1) That unemployment rates have a different impact on sales during a holiday, and
+2) That the extra performance of Dept 92 is different during a holiday.
+
+```{r, message=FALSE, warning=FALSE}
+print("What is the effect of unemployment on sales?")
+summary(lm(Weekly_Sales ~ Unemployment, train))
+print("What if we control for IsHoliday?")
+summary(lm(Weekly_Sales ~ Unemployment + IsHoliday, train))
+print("Is there an interaction effect? (Is the relationship of Unemployment and Sales different on holidays?)")
+summary(lm(Weekly_Sales ~ Unemployment * IsHoliday, train))
+
+print("What is the impact of Dept 92 on Sales?")
+train %>% 
+  select(Weekly_Sales, Dept) %>% 
+  mutate(IsDept92 = Dept == 92) %>% 
+  lm(Weekly_Sales ~ IsDept92, .) %>% 
+  summary
+
+print("What if you control for IsHoliday?")
+train %>% 
+  select(Weekly_Sales, Dept, IsHoliday) %>% 
+  mutate(IsDept92 = Dept == 92) %>% 
+  lm(Weekly_Sales ~ IsDept92 + IsHoliday, .) %>% 
+  summary
+
+print("Is there an interaction effect of unemployment rate on performance of Dept 92? Probably a discretionary item.")
+train %>% 
+  select(Weekly_Sales, Dept, IsHoliday) %>% 
+  mutate(IsDept92 = Dept == 92) %>% 
+  lm(Weekly_Sales ~ IsDept92 * IsHoliday, .) %>% 
+  summary
 ```
 
 
@@ -429,6 +512,8 @@ size_lm %>%
 
 
 
-Regression
-Sensitivity Analysis 
-Interaction Effects
+
+
+
+
+
