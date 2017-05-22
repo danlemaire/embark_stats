@@ -55,6 +55,9 @@ summary(df)
 
 #Remove extra dataframes from memory 
 rm(features, stores) 
+
+#Write full dataframe back to csv
+df %>% write_csv("data/full_data.csv")
 ```
 
 # Test for a true difference between means

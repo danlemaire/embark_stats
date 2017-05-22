@@ -3,14 +3,149 @@ title: "Week 2"
 output: html_notebook
 ---
 
+# Load Libraries and Data
 
-Week 2
+```{r, message=FALSE, warning=FALSE}
+library(magrittr)
+library(tidyverse)
+library(caret)
+library(broom)
+
+set.seed(1234)
+
+df <- read_csv("data/full_data.csv") %>% select(-index)
+df %<>% 
+  map_at(c("Store", "Dept", "Type", "Holiday"), as.factor) %>% 
+  as_tibble
+```
+
+
+
 Caret
+
+```{r, message=FALSE, warning=FALSE}
+#Build a linear model on all data, let caret handle the boostrapping
+lm <- train(Weekly_Sales ~ ., 
+             df,
+             method = "lm",
+             trControl = trainControl(
+               method = "boot632", #more bias, less variance than k-fold cv, may underfit
+               number = 10
+               )
+             )
+lm
+lm$results$RMSE
+lm$times$everything[3] #Boot strap is slower than cv
+
+
+#Build a linear model on all data, let caret handle the cross validation
+lm1 <- train(Weekly_Sales ~ ., 
+             df,
+             method = "lm",
+             trControl = trainControl(
+               method = "repeatedcv", #less bias, more variance than boostrapping, may overfit
+               number = 10
+               )
+             )
+
+lm1
+lm1$results$RMSE
+lm1$times$everything[3] #CV is faster than boostrap
+```
+
+
+
+
+
+```{r, message=FALSE, warning=FALSE}
+#Split into train and test
+train <- sample_frac(df, .7)
+test <- setdiff(df, train)
+
+#Build a linear model on only training data
+lm2 <- train(Weekly_Sales ~ ., 
+             train,
+             method = "lm",
+             trControl = trainControl(
+               method = "cv", 
+               number = 10,
+               repeats = 5
+               )
+             )
+
+lm2
+
+#Expected error in out-of-sample data based only on in-sample data
+lm2$results$RMSE 
+
+#Actual error in out-of-sample data
+predict(lm2, test) %>% postResample(test$Weekly_Sales) %>% round(2)
+
+#Remove train and test sets
+rm(train, test)
+```
+
+
+
+```{r}
+#1285 weeks where sales were negative
+df %>% filter(Weekly_Sales < 0) %>% count
+
+#But it looks fairly evenly distributed throughout all other independent variables.  What does negative sales mean?
+df %>% group_by(Holiday) %>% filter(Weekly_Sales < 0) %>% count
+
+#Create categorical variable for sales, positive or negative sales for the week
+glm_data <- df %>% 
+  mutate(Weekly_Sales = factor(Weekly_Sales < 0, labels = c("Negative", "Positive"))) %>% 
+  sample_frac(.1)
+
+#Build a train control with summary function
+trControl <- trainControl(
+  method = "cv",
+  number = 3,
+  returnResamp = "final",
+  savePredictions = "final",
+  classProbs = T,
+  summaryFunction = twoClassSummary
+)
+
+#Build logistic regression
+glm <- train(Weekly_Sales ~ .,
+             glm_data,
+             method = "glm",
+             family = binomial(link = "logit"),
+             preProcess = c("nzv", "center", "scale"),
+             trControl = trControl,
+             metric = "ROC"
+             )
+
+glm %>% 
+  summary
+
+varImp(glm)
+
+
+
+```
+
+
+
+
 Logistic Regression
+
+
 Overfitting
+
+
 Train/test split
+
+
 Cross-fold Validation
+
+
 Model Pre-processing (nzv, center, scale, pca, log)
+
+
 Imputation
 
 
