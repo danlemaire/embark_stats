@@ -7,11 +7,13 @@ output:
 
 # Basic Business Statistics in R
 
-In my interactions with business professionals who use R, I have frequently heard the importance of reviewing the statistical fundamentals that drive decision-making in the workplace.  The purpose of this notebook is to review the most fundamental elements of statistically sound decision-making using a typical business dataset.  In this notebook, regressions and tests for significance are reviewed.
+In my interactions with business professionals who use R, I have frequently heard the importance of reviewing the statistical fundamentals that drive decision-making in the workplace.  The purpose of this notebook is to review the most fundamental elements of statistically sound decision making using a typical business dataset.  In this notebook, regressions and tests for significance are reviewed.
 
 ## Load Packages and Necessary Data
 
-```{r, message=FALSE, warning=FALSE, include=FALSE} 
+To begin, we will need to load all required libraries, load the data, and combine into one dataframe.  This data comes from real sales data for a national chain that has been made public via Kaggle.
+
+```{r, message=FALSE, warning=FALSE}
 library(ggvis)
 library(caret) 
 library(lubridate) 
@@ -36,9 +38,9 @@ df %<>%
 
 #Add specific holidays to data set 
 df %<>% left_join(data_frame(Date = as.Date(c("2010-02-12", "2011-02-11", "2012-02-10", "2013-02-08", 
-                                                "2010-09-10", "2011-09-09", "2012-09-07", "2013-09-06", 
-                                                "2010-11-26", "2011-11-25", "2012-11-23", "2013-11-29",
-                                                "2010-12-31", "2011-12-30", "2012-12-28", "2013-12-27")),
+                                              "2010-09-10", "2011-09-09", "2012-09-07", "2013-09-06", 
+                                              "2010-11-26", "2011-11-25", "2012-11-23", "2013-11-29",
+                                              "2010-12-31", "2011-12-30", "2012-12-28", "2013-12-27")),
                                Holiday = c(rep("Superbowl", 4), 
                                            rep("LaborDay", 4), 
                                            rep("Thanksgiving", 4), 
@@ -48,9 +50,8 @@ df %<>% left_join(data_frame(Date = as.Date(c("2010-02-12", "2011-02-11", "2012-
                     by = "Date" )
 
 #Look at full dataset 
-glimpse(df) 
+#glimpse(df) 
 summary(df)
-
 
 #Remove extra dataframes from memory 
 rm(features, stores) 
@@ -58,13 +59,13 @@ rm(features, stores)
 
 # Test for a true difference between means
 
-For the first challenge, we will compare stores 20, 4, and 39.  Stores 20 and 4 are ranked #1 and #2 in average weekly sales (out of 45 total stores) while store 39 is ranked #10. Does store 20 perform better than store 4?  Does store 20 perform better than store 39?
+One challenge of business decision making is determining whether an observation represents a true picture of the world.  Since we can never account for every single factor in a model, all models are imperfect and wrong (though many are still useful).  Examples of this problem arise when managers must decide whether a there is a true difference in performance between sales staff, departments, or regions.  How much of a difference is enough to conclude that one store is performing better than another?
 
-To conceptualize the problem, I consider disc golf.  I have certainly played a few rounds where I have performed at par, but does this mean I am par player?  I tend to remember my best rounds and chalk it up to skill while discarding my worst rounds as "bad luck".  The reality is that some of the outcome is skill and some is luck. If I were to play against someone exactly as skilled as myself and win by one stroke, it would not be accurate to say that I am a better player since it was really chance that determined it.  However, how many strokes would I have to win by before you start disbelieving that my competitor really is as good as me: 3? 10? 20?
+To conceptualize the problem, I consider playing disc golf with my wife.  If I watch one player beat another by one stroke over 18 holes, I would not feel confident to conclude that she is better than her peer (it woudl seem plausible that the difference could just be luck).  However, is she beat her peer by 15 strokes in one game, I would feel pretty confident that she is better.  Alternatively, if she beat her peer by one stroke every single time over 150 games, I would feel pretty confident that she is marginally better.  Our confidence that there is a difference in performance between two players can increase with either a bigger difference in performance or a greater number of observations.
 
-In the same way, how do we compare the sales performance of several stores? If one store sells 10M dollars in product in one week, but another sells 10,000,001 dollars, would you believe that the second store is better than the first? If we just look at the average weekly sales and say that store 20 outperforms
-store 4, while both outperform store 39, the data would appear to support this.  However, this does not take into account the natural variation in each week's sales.  The challenge then is to use the Welch's Studentized T-test to see if there is a true difference between means.
+In the same way, we can compare the sales performance of several stores in this dataset. If one store sells 10M dollars in product in one week, but another sells 10,000,001 dollars, would you believe that the second store is better than the first? In this data set we can look at the average weekly sales of each store and see that Store #20 outperforms Store #4, while both outperform Store #39. However, this does not take into account the natural variation in each week's sales.  The challenge then is to use the Welch's Studentized T-test to see if there is a true difference between means.
 
+For the first challenge, we will compare stores #20, #4, and #39.  Stores #20 and #4 are ranked #1 and #2 in average weekly sales (out of 45 total stores) while store #39 is ranked #10. Does store #20 perform better than store #4?  Does store #20 perform better than store #39?
 
 ```{r, message=FALSE, warning=FALSE}
 #Rank stores to see how weekly averages compare 
@@ -73,7 +74,7 @@ df %>%
   group_by(Store) %>% 
   summarise(avg = mean(Weekly_Sales)) %>% 
   arrange(-avg) %>% 
-  mutate(rank = rank(-avg)) 
+  mutate(rank = rank(-avg))
 ```
 
 
@@ -92,22 +93,26 @@ store_4_sales <- df %>%
   unlist 
 
 twenty_vs_four <- stats::t.test(store_20_sales, store_4_sales, conf.level = .95)
+twenty_vs_four
 
 #Distributions of store 20 and store 4 
 data_frame(sales = store_20_sales, store = "Store 20") %>% 
   bind_rows(data_frame(sales = store_4_sales, store = "Store4")) %>% 
   ggplot(aes(sales, fill = store)) + 
     geom_density(alpha = .3) + 
-    scale_x_log10(limits = c(1, 1000000)) + 
+    scale_x_log10(limits = c(1, 1000000), labels = dollar) + 
     geom_vline(xintercept = mean(store_20_sales), color = "red") + 
-    geom_vline(xintercept = mean(store_4_sales), color = "blue")
+    geom_vline(xintercept = mean(store_4_sales), color = "blue") +
+    labs(title = "Very little difference in the distributions between Store #20 and Store #4",
+         x = "Sales",
+         y = "Distribution")
 
 #Visualize difference in means w/errorbars for store 20 and store 4 
 mean_cl_normal(store_20_sales) %>% 
   bind_rows(mean_cl_normal(store_4_sales)) %>% 
   mutate(store = c("store_20", "store_4")) %>% 
   ggplot(aes(x = store, y = y)) + 
-    geom_bar(stat = "identity", fill = "lightgray") + 
+    geom_bar(stat = "identity", fill = "lightgray", width = .5) + 
     geom_errorbar(aes(ymin = ymin, ymax = ymax), width = .2, color = "red") + 
     labs(title = "No true difference in means between Store 20 and Store 4",
          x = element_blank(), 
@@ -127,6 +132,7 @@ store_39_sales <- df %>%
   unlist 
 
 twenty_vs_thirtynine <- stats::t.test(store_20_sales, store_39_sales, conf.level = .95)
+twenty_vs_thirtynine
 
 #Distribution of store 20 and store 39 
 data_frame(sales = store_20_sales, store = "Store 20") %>% 
@@ -135,7 +141,10 @@ data_frame(sales = store_20_sales, store = "Store 20") %>%
     geom_density(alpha = .3) + 
     scale_x_log10(limits = c(1, 1000000)) + 
     geom_vline(xintercept = mean(store_20_sales), color = "red") + 
-    geom_vline(xintercept = mean(store_39_sales), color = "blue")
+    geom_vline(xintercept = mean(store_39_sales), color = "blue") +
+    labs(title = "Noticeable difference in the distributions between Store #20 and Store #39",
+         x = "Sales",
+         y = "Distribution")
 
 #Visualizing difference in means and errorbars for store 20 and store 39 
 mean_cl_normal(store_20_sales) %>% 
@@ -148,14 +157,16 @@ mean_cl_normal(store_20_sales) %>%
          x = element_blank(), 
          y = "Average Weekly Sales") + 
     scale_x_discrete(labels = c("Store 20", "Store 39")) +  
-    scale_y_continuous(labels = scales::dollar) + theme_bw() 
+    scale_y_continuous(labels = scales::dollar) + 
+    theme_bw() 
+
 ```
 
 # Interpreting OLS Linear Regressions
 
 ## How can I compare the conditional means of all stores at once?
 
-With summary(lm()), we can run a quick OLS linear regression.  By factoring Store, the model creates a dummy variable for every level of the factor except the first, which is used as the reference case.  Each estimate (or Beta) is the conditional mean of that level when added to the intercept of the model. A p-value is produced for each level, which describes whether the estimate is statistically significant.
+There are 45 distinct stores in this dataset.  It would be painstaking to test for a true difference in means for each combination.  Instead, we can run a quick OLS linear regression in a single line of code with summary(lm()).  By factoring Store, the model creates a dummy variable for every level of the factor except the first, which is used as the reference case.  Each estimate (or Beta) is the conditional mean of that level when added to the intercept of the model. A p-value is produced for each level, which describes whether the estimate is statistically significant.  Here, we compare the output of the linear model with the independent conditional means of several test cases.
 
 ```{r, message=FALSE, warning=FALSE}
 #Check output of simple linear model 
@@ -209,6 +220,8 @@ lm_simplified_output %>%
 
 ## How can I interpret the output of my model?
 
+The output for a simple linear regression is simple to interpret and useful for prediction and inference.  Here, we review the available objects, some basic performance measures, and introductory diagnostics.
+
 ```{r, message=FALSE, warning=FALSE}
 #Available objects in output of model
 lm1 <- lm(Weekly_Sales ~ factor(Store), df)
@@ -225,7 +238,7 @@ data_frame(res = summary(lm1)$residuals, index = 1:length(summary(lm1)$residuals
   ggplot(aes(index, res)) + 
     geom_point(alpha = .01, size = .1) + 
     geom_hline(yintercept = 0, color = "red", size = 1, alpha = .4) + 
-    geom_smooth(color = "blue", size = .7) + 
+    geom_smooth(color = "blue", size = .7, se = T) + 
     coord_cartesian(ylim = c(-25000, 25000)) + 
     labs(title = "Do the residuals (observed - fitted) look non-systematic? ", 
          y = "Residuals", 
@@ -244,7 +257,7 @@ lm(Weekly_Sales ~ IsHoliday, df) %>%
   plot
 
 #What would diagnostic plots of a continuous variable look like? 
-lm(Weekly_Sales ~ Size, df) %>% 
+lm(Weekly_Sales ~ Unemployment, df) %>% 
   plot
 
 #What were those big outliers (Cook's Distance)? Black Friday!! 
@@ -263,7 +276,7 @@ par(mfrow = c(1,1)) # Most prefer to change immediately back to 1 x 1 to avoid l
 ###Scale-Location Plot: Again clear differences between right and left 
 ####Residuals vs Leverage Plot: Strange clustering (holidays?), but no single point exerts too much leverage.  Could try investigating or removing labelled points
 
-#Is there anything special about the observations with highest leverage? Black Friday!
+#Is there anything special about the observations with highest leverage? Also Black Friday!
 df %>% 
   select(Store, Date, IsHoliday, Weekly_Sales) %>% 
   slice(c(224464, 37254, 954266)) 
@@ -271,9 +284,11 @@ df %>%
 
 #Controlling for other variables
 
+The shortcoming of univariate regression is that it cannot account for other possible explanations.  For example one might discover that there is a strong relationship between height likelihood of being incarcerated.  However, when controlling for gender, we find that males are incarcerated at significantly higher rates than females and also tend to be taller.  When the "control" (adding "gender" as another independent variable) is added to the model, the relationship between height and incarceration disappears, and it is found that gender is the explanatory variable.
+
 ## Is Store the only variable that affects weekly sales?
 
-We might hypothesize that if the week contains a significant holiday, that may influence the weekly sales. The holidays recorded are Superbowl, Labor Day, Thanksgiving, and Christmas.  In the formula for the linear model, the dependent variable is on the left and the independent variable is on the right of the tilde.  To add a control, simply append it with a plus sign as another independent variable.  The first order of business is to factor all necessary variables and shuffle into random order as per diagnostic plots above.
+Similarly, we might hypothesize that if the week contains a significant holiday, that may influence the weekly sales. The holidays recorded are Superbowl, Labor Day, Thanksgiving, and Christmas.  In the formula for the linear model, the dependent variable is on the left and the independent variable is on the right of the tilde.  To add a control, simply append it with a plus sign as another independent variable.  The first order of business is to factor all necessary variables and shuffle into random order.  Next, interpret the results of the linear models with controls.
 
 
 ```{r, message=FALSE, warning=FALSE}
@@ -344,7 +359,7 @@ summary(lm(Weekly_Sales ~ ., data = df[,c(1:16,18:20)])) %>%
 
 # How can I measure the performance of my model?
 
-All models try to approximate a real world system. Some portion of real-world systems are systematic and therefore, can be modelled.  However, the other portion of the real-world system is random and cannot be modelled.  "All models are wrong, but some are useful".  The best performing models have captured nearly all of the systematic variance of the real-world system without modelling the random portion of the system.  For an in-depth understanding, read about the "Bias-Variance Tradeoff".  In reality, the closer we get to modelling all of the systematic variance, the greater the risk we have of modellign the random variance, a problem known as overfitting.  When we do this, the model does not work as well on new data or we may make incorrect inferences. Lets split the data into a train and test set, optimize the model for the train set and see how it compares on the test set.
+All models try to approximate a real world system. Some portion of real-world systems are systematic and therefore, can be modeled.  However, the other portion of the real-world system is random and cannot be modeled.  "All models are wrong, but some are useful".  The best-performing models have captured nearly all of the systematic variance of the real-world system without modeling the random portion of the system.  For an in-depth understanding, read about the "Bias-Variance Tradeoff".  In reality, the closer we get to modeling all of the systematic variance, the greater the risk we have of modeling the random variance, a problem known as overfitting.  When we do this, the model does not work as well on new data or we may make incorrect inferences. Lets split the data into a train and test set, optimize the model for the train set, and see how it compares on the test set.
 
 ```{r, message=FALSE, warning=FALSE}
 set.seed(1234)
@@ -407,7 +422,7 @@ fold_and_model(df, 10)
 
 # Confidence Intervals 
 
-Statistics is sometimes referred to as the "science of uncertainty".  It is an attempt at recognizing, quantifying, and communicating insights along with their associated uncertainty.  To get an intuition for how uncertainty in models can look, we build a dataframe out of 
+Remember, statistics is the "science of uncertainty".  It is an attempt at recognizing, quantifying, and communicating insights along with their associated uncertainty.  To get an intuition for how uncertainty in models can look, we build a dataframe out of all the test set predictions using the model we built on the train dataset.
 
 ```{r, message=FALSE, warning=FALSE}
 #Change proportion of sample size to see what happens to confidence interval
@@ -439,11 +454,14 @@ predictions <- predict(size_lm,
 predictions
 ```
 
+Notice that each prediction ("fit") has a "spread" of uncertainty around it.  How can we understand what this "spread" or uncertainty means?  In the next visualization, the blue points represent the observations in the train set.  A blue linear fit line is plotted along with the blue confidence interval; this represents the best guess of where the points will land in the test set.  On top of that, the actual predictions from the test set are plotted in red, along with the errorbars based on their independent confidence intervals.
+
+If you are viewing this notebook in a running R session, try different values for the confidence level and the fraction of the dataset to sample.  If the confidence level is changed from the standard 95% to another value, what happens to the width of the blue confidence ribbon?  Similarly, if the amount of data used to build the model is changed from 0.01% to a higher fraction fo the data, what happens to the blue confidence ribbon?  What happens to the red errorbars?
 
 ```{r, message=FALSE, warning=FALSE}
 #Experiment with size of sample and confidence level
 sample_fraction = .001
-confidence_level = .95
+confidence_level = .1
 
 #Look at confidence interval of prediction
 sample_frac(train, sample_fraction) %>% 
@@ -467,9 +485,26 @@ sample_frac(train, sample_fraction) %>%
          y = "Weely Sales")
 ```
 
+Let's also look at the actual variation of the observations around the predictions:
+
+```{r}
+test %>% 
+  bind_cols(as_tibble(predict(size_lm, ., interval = "confidence"))) %>%
+  ggplot(aes(Size, Weekly_Sales)) +
+    #Plot test observations
+    geom_point(alpha = .01) +
+    #Plot test predictions
+    geom_point(aes(Size, fit), alpha = .01, color = "red") +
+    labs(title = "Notice the variation of the actual observations around the prediction",
+         x = "Size of store (units unknown)",
+         y = "Weely Sales")
+
+
+```
+
 # Interaction Effects
 
-We have reviewed how to model the relationship between one dependent and one indepedent variable.  We have alos modelled the relationship when adding several other independent variables as controls. However, we might still be interested in how the relationship between the dependent and the independent variable might change relative to another variable.
+We have reviewed how to model the relationship between one dependent and one indepedent variable.  We have also modeled the relationship when adding several other independent variables as controls. However, we might still be interested in how the relationship between the dependent and the independent variable might change relative to another variable.
 
 For example, one might hypothesize that poor weather will increase the accident rate in a certain area.  One might go further, though, and say that the effect of weather on accident rates is stronger in the dark than in the daylight.  How would one test for these interaction effects between variables?
 
@@ -508,12 +543,6 @@ train %>%
 ```
 
 
+Thanks to all for sticking with me to the very end.  Happy sciencing!
 
-
-
-
-
-
-
-
-
+-Dan
